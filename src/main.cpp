@@ -1,6 +1,39 @@
 #include <Arduino.h>
 #include <TinyGPS++.h>
 #include <SoftwareSerial.h>
+#include <Wire.h>
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+
+// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
+#define OLED_RESET     4 // Reset pin # (or -1 if sharing Arduino reset pin)
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+#define NUMFLAKES     10 // Number of snowflakes in the animation example
+
+#define LOGO_HEIGHT   16
+#define LOGO_WIDTH    16
+static const unsigned char PROGMEM logo_bmp[] =
+{ B00000000, B11000000,
+  B00000001, B11000000,
+  B00000001, B11000000,
+  B00000011, B11100000,
+  B11110011, B11100000,
+  B11111110, B11111000,
+  B01111110, B11111111,
+  B00110011, B10011111,
+  B00011111, B11111100,
+  B00001101, B01110000,
+  B00011011, B10100000,
+  B00111111, B11100000,
+  B00111111, B11110000,
+  B01111100, B11110000,
+  B01110000, B01110000,
+  B00000000, B00110000 };
 
 struct loc
 {
@@ -12,6 +45,8 @@ loc locHistory{
   lat: 0,
   lng: 0,
 };
+
+// unsigned long metersSinceLast = 0;
 
 int historyLength = 0;
 
@@ -72,43 +107,47 @@ static void printFloat(float val, bool valid, int len, int prec)
   }
   smartDelay(0);
 }
-
-static void printDateTime(TinyGPSDate &d, TinyGPSTime &t)
-{
-  if (!d.isValid())
+ 
+void scan() {
+  byte error, address;
+  int nDevices;
+ 
+  Serial.println("Scanning...");
+ 
+  nDevices = 0;
+  for(address = 1; address < 127; address++ )
   {
-    Serial.print(F("********** "));
+    // The i2c_scanner uses the return value of
+    // the Write.endTransmisstion to see if
+    // a device did acknowledge to the address.
+    Wire.beginTransmission(address);
+    error = Wire.endTransmission();
+ 
+    if (error == 0)
+    {
+      Serial.print("I2C device found at address 0x");
+      if (address<16)
+        Serial.print("0");
+      Serial.print(address,HEX);
+      Serial.println("  !");
+ 
+      nDevices++;
+    }
+    else if (error==4)
+    {
+      Serial.print("Unknown error at address 0x");
+      if (address<16)
+        Serial.print("0");
+      Serial.println(address,HEX);
+    }    
   }
+  if (nDevices == 0)
+    Serial.println("No I2C devices found\n");
   else
-  {
-    char sz[32];
-    sprintf(sz, "%02d/%02d/%02d ", d.month(), d.day(), d.year());
-    Serial.print(sz);
-  }
-  
-  if (!t.isValid())
-  {
-    Serial.print(F("******** "));
-  }
-  else
-  {
-    char sz[32];
-    sprintf(sz, "%02d:%02d:%02d ", t.hour(), t.minute(), t.second());
-    Serial.print(sz);
-  }
+    Serial.println("done\n");
+};
 
-  smartDelay(0);
-}
-
-void setup()
-{
-  Serial.begin(115200);
-  ss.begin(GPSBaud);
-}
-
-void loop()
-{
-
+int getGpsData() {
   Serial.println();
 
   // printInt(gps.satellites.value(), gps.satellites.isValid(), 5);
@@ -147,7 +186,7 @@ void loop()
       Serial.print("metersSinceLast: ");
       Serial.println(metersSinceLast);
 
-    if (metersSinceLast > 2) {
+    if (metersSinceLast > 10) {
       // locHistory is init with lat/lng = 0,
       // so we skip the first history to avoid
       // a false distance between (0,0) and current (lat,lng)
@@ -172,6 +211,91 @@ void loop()
   
   smartDelay(1000);
 
-  if (millis() > 5000 && gps.charsProcessed() < 10)
+  if (millis() > 5000 && gps.charsProcessed() < 10) {
     Serial.println(F("No GPS data received: check wiring"));
+  }
+
+  // int 
+
+  return gps.satellites.isValid() ? gps.satellites.value() : 0;
+};
+
+void setupDisplay() {
+  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3D for 128x64
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;); // Don't proceed, loop forever
+  }
+
+  // Clear the buffer
+  display.clearDisplay();
+
+  // Draw a single pixel in white
+  display.drawPixel(10, 10, SSD1306_WHITE);
+
+  // Show the display buffer on the screen. You MUST call display() after
+  // drawing commands to make them visible on screen!
+  display.display();
+  delay(100);
+};
+
+void renderInfoOnDisplay(int satellites) {
+  display.clearDisplay();
+
+  display.setTextSize(1);             // Normal 1:1 pixel scale
+  display.setCursor(0,0);             // Start at top-left corner
+  display.setTextColor(SSD1306_BLACK, SSD1306_WHITE); // Draw 'inverse' text
+  display.print("GPS");
+  display.setTextColor(SSD1306_WHITE);
+  display.print(": ");
+  display.println(satellites);
+
+  // display.setTextColor(SSD1306_BLACK, SSD1306_WHITE); // Draw 'inverse' text
+  // display.print("M since last");
+  // display.setTextColor(SSD1306_WHITE);
+  // display.print(": ");
+  // display.println(metersSinceLast);
+
+  display.println("meters:");
+  display.setTextSize(2);
+  display.setTextColor(SSD1306_WHITE);
+  display.println(distance.m);
+
+  display.setTextSize(1);
+  display.println("kilometers:");
+  display.setTextSize(2);
+  display.setTextColor(SSD1306_WHITE);
+  display.println(distance.km, 3);
+
+  display.display();
+};
+
+void renderDisplayIntro() {
+  display.clearDisplay();
+
+  for(int16_t i=0; i<display.height()/2-2; i+=2) {
+    // The INVERSE color is used so round-rects alternate white/black
+    display.fillRoundRect(i, i, display.width()-2*i, display.height()-2*i,
+      display.height()/4, SSD1306_INVERSE);
+    display.display();
+    delay(1);
+  }
+
+  delay(2000);
+};
+
+void setup()
+{
+  Serial.begin(115200);
+  Wire.begin();
+  scan();
+  setupDisplay();
+  ss.begin(GPSBaud);
+  renderDisplayIntro();
+}
+
+void loop()
+{
+  int satellites = getGpsData();
+  renderInfoOnDisplay(satellites);
 }
