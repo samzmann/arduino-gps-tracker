@@ -46,7 +46,7 @@ loc locHistory{
   lng: 0,
 };
 
-// unsigned long metersSinceLast = 0;
+unsigned int metersSinceLast = 0;
 
 int historyLength = 0;
 
@@ -172,7 +172,7 @@ int getGpsData() {
       lng: gps.location.lng(),
     };
 
-    unsigned long metersSinceLast = TinyGPSPlus::distanceBetween(
+    metersSinceLast = TinyGPSPlus::distanceBetween(
       newLoc.lat,
       newLoc.lng,
       locHistory.lat, 
@@ -244,28 +244,22 @@ void renderInfoOnDisplay(int satellites) {
 
   display.setTextSize(1);             // Normal 1:1 pixel scale
   display.setCursor(0,0);             // Start at top-left corner
-  display.setTextColor(SSD1306_BLACK, SSD1306_WHITE); // Draw 'inverse' text
-  display.print("GPS");
-  display.setTextColor(SSD1306_WHITE);
-  display.print(": ");
+  display.setTextColor(SSD1306_WHITE); // Draw 'inverse' text
+  display.print("GPS: ");
   display.println(satellites);
 
-  // display.setTextColor(SSD1306_BLACK, SSD1306_WHITE); // Draw 'inverse' text
-  // display.print("M since last");
-  // display.setTextColor(SSD1306_WHITE);
-  // display.print(": ");
-  // display.println(metersSinceLast);
+  display.print("M since last: ");
+  display.println(metersSinceLast);
 
-  display.println("meters:");
+  // display.println("meters:");
   display.setTextSize(2);
-  display.setTextColor(SSD1306_WHITE);
   display.println(distance.m);
 
-  display.setTextSize(1);
-  display.println("kilometers:");
-  display.setTextSize(2);
-  display.setTextColor(SSD1306_WHITE);
-  display.println(distance.km, 3);
+  // display.setTextSize(1);
+  // display.println("kilometers:");
+  // display.setTextSize(2);
+  // display.setTextColor(SSD1306_WHITE);
+  // display.println(distance.km, 3);
 
   display.display();
 };
@@ -286,9 +280,9 @@ void renderDisplayIntro() {
 
 void setup()
 {
-  Serial.begin(115200);
   Wire.begin();
-  scan();
+  Serial.begin(115200);
+  // scan();
   setupDisplay();
   ss.begin(GPSBaud);
   renderDisplayIntro();
